@@ -9,7 +9,7 @@ export class CameraManager {
     this.stream = null;
     this.currentVideoDeviceId = null;
     this.currentAudioDeviceId = null;
-    this.targetResolution = '1080p'; // '720p', '1080p', '4k', 'default'
+    this.targetResolution = '1080p'; // '720p', '1080p', '4k', '480p', 'default'
     this.facingMode = 'user'; // 'user' or 'environment'
     this.isVideoMuted = false;
     this.isAudioMuted = false;
@@ -43,12 +43,13 @@ export class CameraManager {
       case '480p':
         return { width: { ideal: 640 }, height: { ideal: 480 } };
       default:
-        return true;
+        return {};
     }
   }
 
   /**
    * Requests media stream with current constraints
+   * Safely acquires the new stream BEFORE stopping old tracks to prevent preview freeze
    * @param {Object} options Override default constraints
    * @returns {Promise<MediaStream>}
    */
@@ -57,56 +58,75 @@ export class CameraManager {
       throw new Error('MediaDevices API is not supported in this browser. Please use a modern browser.');
     }
 
-    // Stop existing stream tracks
-    this.stopStream();
-
     const videoConstraints = options.video === false ? false : {
       ...this._getResolutionConstraints(),
-      deviceId: this.currentVideoDeviceId ? { exact: this.currentVideoDeviceId } : undefined,
-      facingMode: !this.currentVideoDeviceId ? this.facingMode : undefined,
+      deviceId: this.currentVideoDeviceId ? { ideal: this.currentVideoDeviceId } : undefined,
+      facingMode: !this.currentVideoDeviceId ? { ideal: this.facingMode } : undefined,
     };
 
     const audioConstraints = options.audio === false ? false : {
-      deviceId: this.currentAudioDeviceId ? { exact: this.currentAudioDeviceId } : undefined,
+      deviceId: this.currentAudioDeviceId ? { ideal: this.currentAudioDeviceId } : undefined,
       echoCancellation: true,
       noiseSuppression: true,
       autoGainControl: true,
     };
 
+    let newStream;
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
+      newStream = await navigator.mediaDevices.getUserMedia({
         video: videoConstraints,
         audio: audioConstraints,
       });
-
-      // Update current device IDs based on active tracks
-      const videoTrack = this.stream.getVideoTracks()[0];
-      if (videoTrack) {
-        const settings = videoTrack.getSettings();
-        if (settings.deviceId) this.currentVideoDeviceId = settings.deviceId;
-      }
-
-      const audioTrack = this.stream.getAudioTracks()[0];
-      if (audioTrack) {
-        const settings = audioTrack.getSettings();
-        if (settings.deviceId) this.currentAudioDeviceId = settings.deviceId;
-      }
-
-      // Apply initial mute states if set
-      this.setVideoEnabled(!this.isVideoMuted);
-      this.setAudioEnabled(!this.isAudioMuted);
-
-      return this.stream;
     } catch (err) {
-      console.error('Failed to get media stream:', err);
-      // Fallback: If 1080p constraint failed, retry with basic video constraints
-      if (this.targetResolution !== 'default' && (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError')) {
-        console.warn('Retrying stream with default resolution constraints...');
+      console.warn('Initial getUserMedia failed, attempting fallback constraints:', err);
+      // Fallback: If ideal resolution or constraints failed, retry with basic video constraints
+      if (this.targetResolution !== 'default' || this.currentVideoDeviceId) {
         this.targetResolution = 'default';
-        return this.startStream(options);
+        try {
+          newStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: this.facingMode },
+            },
+            audio: audioConstraints,
+          });
+        } catch (fallbackErr) {
+          console.error('Fallback stream acquisition also failed:', fallbackErr);
+          throw fallbackErr;
+        }
+      } else {
+        throw err;
       }
-      throw err;
     }
+
+    // Safely stop tracks on the PREVIOUS stream now that the new stream is ready
+    const oldStream = this.stream;
+    this.stream = newStream;
+    if (oldStream) {
+      oldStream.getTracks().forEach(track => {
+        try {
+          track.stop();
+        } catch (e) {}
+      });
+    }
+
+    // Update current device IDs based on active tracks
+    const videoTrack = this.stream.getVideoTracks()[0];
+    if (videoTrack) {
+      const settings = videoTrack.getSettings();
+      if (settings.deviceId) this.currentVideoDeviceId = settings.deviceId;
+    }
+
+    const audioTrack = this.stream.getAudioTracks()[0];
+    if (audioTrack) {
+      const settings = audioTrack.getSettings();
+      if (settings.deviceId) this.currentAudioDeviceId = settings.deviceId;
+    }
+
+    // Apply active mute states
+    this.setVideoEnabled(!this.isVideoMuted);
+    this.setAudioEnabled(!this.isAudioMuted);
+
+    return this.stream;
   }
 
   /**
@@ -146,7 +166,7 @@ export class CameraManager {
    * Switch active camera
    */
   async switchCamera(deviceId) {
-    this.currentVideoDeviceId = deviceId;
+    this.currentVideoDeviceId = deviceId || null;
     return this.startStream();
   }
 
@@ -154,25 +174,55 @@ export class CameraManager {
    * Switch active microphone
    */
   async switchMicrophone(deviceId) {
-    this.currentAudioDeviceId = deviceId;
+    this.currentAudioDeviceId = deviceId || null;
     return this.startStream();
   }
 
   /**
-   * Toggle between front and back camera (for mobile/tablet devices)
+   * Flip camera:
+   * - If multiple cameras exist, cycle to the next camera device.
+   * - Otherwise, toggle facingMode (user <-> environment).
+   */
+  async flipCamera() {
+    const { cameras } = await this.getDevices();
+    if (cameras && cameras.length > 1) {
+      const currentIndex = cameras.findIndex(c => c.deviceId === this.currentVideoDeviceId);
+      const nextIndex = currentIndex === -1 ? 1 : (currentIndex + 1) % cameras.length;
+      this.currentVideoDeviceId = cameras[nextIndex].deviceId;
+      return this.startStream();
+    } else {
+      this.facingMode = this.facingMode === 'user' ? 'environment' : 'user';
+      this.currentVideoDeviceId = null;
+      return this.startStream();
+    }
+  }
+
+  /**
+   * Alias for backward compatibility
    */
   async flipFacingMode() {
-    this.facingMode = this.facingMode === 'user' ? 'environment' : 'user';
-    this.currentVideoDeviceId = null; // Clear explicit device ID to honor facingMode
-    return this.startStream();
+    return this.flipCamera();
   }
 
   /**
-   * Set resolution preset
+   * Set resolution preset on the fly:
+   * First attempts videoTrack.applyConstraints() for instant zero-restart change;
+   * falls back to startStream() if needed.
    */
   async setResolution(resolution) {
     this.targetResolution = resolution;
+    const constraints = this._getResolutionConstraints();
+
     if (this.stream) {
+      const videoTrack = this.stream.getVideoTracks()[0];
+      if (videoTrack && typeof videoTrack.applyConstraints === 'function') {
+        try {
+          await videoTrack.applyConstraints(constraints);
+          return this.stream;
+        } catch (e) {
+          console.warn('videoTrack.applyConstraints failed, falling back to stream re-acquisition:', e);
+        }
+      }
       return this.startStream();
     }
   }

@@ -112,6 +112,43 @@ function showToast(message, duration = 3000) {
 }
 
 /**
+ * Update Resolution Display Tag
+ */
+function updateResolutionDisplay() {
+  const w = previewVideo.videoWidth;
+  const h = previewVideo.videoHeight;
+  if (w && h) {
+    resolutionTag.textContent = `${w}x${h}`;
+  }
+}
+
+/**
+ * Central Stream Attacher:
+ * Binds active MediaStream to video element, starts playback,
+ * attaches Audio VU meter, and updates resolution badges.
+ */
+async function attachStream(stream) {
+  if (!stream) return;
+
+  if (previewVideo.srcObject !== stream) {
+    previewVideo.srcObject = stream;
+  }
+
+  try {
+    await previewVideo.play();
+  } catch (err) {
+    console.warn('previewVideo.play() warning:', err);
+  }
+
+  updateResolutionDisplay();
+
+  // Connect Audio VU Meter
+  audioController.startLevelMeter(stream, (level) => {
+    audioMeterLevel.style.width = `${Math.round(level * 100)}%`;
+  });
+}
+
+/**
  * Update UI according to active mode
  */
 function setMode(mode) {
@@ -162,23 +199,10 @@ async function initCamera() {
 
   try {
     const stream = await camera.startStream();
-    previewVideo.srcObject = stream;
+    await attachStream(stream);
 
-    // Wait for video metadata to read true resolution
-    previewVideo.onloadedmetadata = () => {
-      const w = previewVideo.videoWidth;
-      const h = previewVideo.videoHeight;
-      if (w && h) {
-        resolutionTag.textContent = `${w}x${h}`;
-      }
-      streamStatusBadge.textContent = 'Live';
-      streamStatusBadge.className = 'status-badge live';
-    };
-
-    // Attach Audio VU Meter
-    audioController.startLevelMeter(stream, (level) => {
-      audioMeterLevel.style.width = `${Math.round(level * 100)}%`;
-    });
+    streamStatusBadge.textContent = 'Live';
+    streamStatusBadge.className = 'status-badge live';
 
     // Populate Device Lists
     await populateDeviceSelectors();
@@ -261,7 +285,6 @@ async function populateDeviceSelectors() {
  */
 function triggerFlash() {
   flashOverlay.classList.remove('active');
-  // Trigger reflow
   void flashOverlay.offsetWidth;
   flashOverlay.classList.add('active');
   setTimeout(() => {
@@ -593,6 +616,17 @@ gallery.onItemsChange = (items) => {
  * Setup Event Listeners
  */
 function setupEventListeners() {
+  // Video element events
+  previewVideo.addEventListener('loadedmetadata', updateResolutionDisplay);
+  previewVideo.addEventListener('resize', updateResolutionDisplay);
+
+  // Auto-refresh devices if plugged in / unplugged
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', async () => {
+      await populateDeviceSelectors();
+    });
+  }
+
   // Mode Selection Tabs
   modePhotoBtn.addEventListener('click', () => setMode('photo'));
   modeVideoBtn.addEventListener('click', () => setMode('video'));
@@ -603,7 +637,6 @@ function setupEventListeners() {
 
   // Keyboard Spacebar Shortcut
   window.addEventListener('keydown', (e) => {
-    // If focus is in select or input, don't trigger shutter
     if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
 
     if (e.code === 'Space') {
@@ -687,14 +720,30 @@ function setupEventListeners() {
     }
   });
 
-  // Flip Camera
+  // Flip Camera Button
   btnFlipCamera.addEventListener('click', async () => {
+    if (isRecording) {
+      showToast('Please stop recording before switching cameras.');
+      return;
+    }
+
     try {
-      await camera.flipFacingMode();
+      streamStatusBadge.textContent = 'Switching...';
+      streamStatusBadge.className = 'status-badge';
+
+      const stream = await camera.flipCamera();
+      await attachStream(stream);
       await populateDeviceSelectors();
-      showToast('Camera flipped');
+
+      const info = camera.getVideoInfo();
+      const label = info?.label ? `Switched to ${info.label}` : 'Camera switched';
+      showToast(label);
     } catch (err) {
-      showToast('Could not flip camera');
+      console.error('Flip camera error:', err);
+      showToast('Could not switch camera: ' + err.message);
+    } finally {
+      streamStatusBadge.textContent = 'Live';
+      streamStatusBadge.className = 'status-badge live';
     }
   });
 
@@ -713,38 +762,67 @@ function setupEventListeners() {
   btnCloseSettings.addEventListener('click', () => settingsDrawer.classList.add('hidden'));
   settingsBackdrop.addEventListener('click', () => settingsDrawer.classList.add('hidden'));
 
-  // Camera Selector
+  // Camera Selector in Settings Drawer
   selectCamera.addEventListener('change', async (e) => {
+    if (isRecording) {
+      showToast('Please stop recording before switching cameras.');
+      return;
+    }
+
     try {
-      await camera.switchCamera(e.target.value);
+      streamStatusBadge.textContent = 'Switching...';
+      streamStatusBadge.className = 'status-badge';
+
+      const stream = await camera.switchCamera(e.target.value);
+      await attachStream(stream);
+      await populateDeviceSelectors();
       showToast('Switched camera');
     } catch (err) {
+      console.error('Switch camera error:', err);
       showToast('Failed to switch camera: ' + err.message);
+    } finally {
+      streamStatusBadge.textContent = 'Live';
+      streamStatusBadge.className = 'status-badge live';
     }
   });
 
-  // Microphone Selector
+  // Microphone Selector in Settings Drawer
   selectMicrophone.addEventListener('change', async (e) => {
+    if (isRecording) {
+      showToast('Please stop recording before switching microphones.');
+      return;
+    }
+
     try {
-      await camera.switchMicrophone(e.target.value);
-      if (camera.stream) {
-        audioController.startLevelMeter(camera.stream, (level) => {
-          audioMeterLevel.style.width = `${Math.round(level * 100)}%`;
-        });
-      }
+      const stream = await camera.switchMicrophone(e.target.value);
+      await attachStream(stream);
+      await populateDeviceSelectors();
       showToast('Switched microphone');
     } catch (err) {
+      console.error('Switch mic error:', err);
       showToast('Failed to switch microphone: ' + err.message);
     }
   });
 
   // Resolution Preset Selector
   selectResolution.addEventListener('change', async (e) => {
+    if (isRecording) {
+      showToast('Please stop recording before changing resolution.');
+      return;
+    }
+
     try {
-      await camera.setResolution(e.target.value);
-      showToast(`Resolution preset set to ${e.target.value}`);
+      streamStatusBadge.textContent = 'Updating...';
+      const stream = await camera.setResolution(e.target.value);
+      await attachStream(stream);
+      setTimeout(updateResolutionDisplay, 200);
+      showToast(`Resolution set to ${e.target.value}`);
     } catch (err) {
+      console.error('Set resolution error:', err);
       showToast('Failed to set resolution: ' + err.message);
+    } finally {
+      streamStatusBadge.textContent = 'Live';
+      streamStatusBadge.className = 'status-badge live';
     }
   });
 
