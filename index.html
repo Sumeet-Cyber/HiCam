@@ -24,6 +24,42 @@
       </div>
 
       <div class="top-actions">
+        <!-- Aspect Ratio Selector Dropdown -->
+        <div class="dropdown-wrapper">
+          <button id="btnAspectRatio" class="pill-btn" title="Select Aspect Ratio (16:9, 9:16, 4:3, 3:4, 1:1)" aria-label="Aspect Ratio">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="5" width="18" height="14" rx="2"/>
+            </svg>
+            <span id="aspectRatioLabel">16:9</span>
+          </button>
+          <div id="aspectRatioMenu" class="dropdown-menu hidden">
+            <button data-ratio="16:9" class="dropdown-item active">
+              <span class="ratio-name">16:9</span>
+              <span class="ratio-desc">Widescreen Landscape</span>
+            </button>
+            <button data-ratio="9:16" class="dropdown-item">
+              <span class="ratio-name">9:16</span>
+              <span class="ratio-desc">Vertical Story / Reel</span>
+            </button>
+            <button data-ratio="4:3" class="dropdown-item">
+              <span class="ratio-name">4:3</span>
+              <span class="ratio-desc">Standard Photo</span>
+            </button>
+            <button data-ratio="3:4" class="dropdown-item">
+              <span class="ratio-name">3:4</span>
+              <span class="ratio-desc">Vertical Portrait</span>
+            </button>
+            <button data-ratio="1:1" class="dropdown-item">
+              <span class="ratio-name">1:1</span>
+              <span class="ratio-desc">Square</span>
+            </button>
+            <button data-ratio="native" class="dropdown-item">
+              <span class="ratio-name">Native</span>
+              <span class="ratio-desc">Full Sensor</span>
+            </button>
+          </div>
+        </div>
+
         <!-- Quick Viewfinder Overlays -->
         <button id="btnToggleGrid" class="icon-btn" title="Toggle 3x3 Framing Grid" aria-label="Toggle Grid">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
@@ -60,57 +96,60 @@
     <!-- Main Viewfinder Section -->
     <main class="viewfinder-section">
       <div id="viewfinder" class="viewfinder mirrored">
-        <!-- Live Video Element -->
-        <video id="previewVideo" playsinline autoplay muted></video>
+        <!-- Viewfinder Viewport: Dynamic Framing matching selected aspect ratio -->
+        <div id="viewfinderViewport" class="viewfinder-viewport ratio-16-9">
+          <!-- Live Video Element -->
+          <video id="previewVideo" playsinline autoplay muted></video>
 
-        <!-- Audio Mode Visualizer Visual Placeholder -->
-        <div id="audioModeVisual" class="audio-mode-visual hidden">
-          <div class="mic-pulse-ring"></div>
-          <div class="mic-icon-large">
-            <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor">
-              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-            </svg>
-          </div>
-          <h3>Audio Recording Mode</h3>
-          <p>Microphone is live and ready</p>
-        </div>
-
-        <!-- 3x3 Rule-of-Thirds Grid Overlay -->
-        <div id="framingGrid" class="framing-grid hidden">
-          <div class="grid-line v1"></div>
-          <div class="grid-line v2"></div>
-          <div class="grid-line h1"></div>
-          <div class="grid-line h2"></div>
-        </div>
-
-        <!-- Shutter Flash Effect -->
-        <div id="flashOverlay" class="flash-overlay"></div>
-
-        <!-- Countdown Animated Number Badge -->
-        <div id="countdownBadge" class="countdown-badge hidden">3</div>
-
-        <!-- Viewfinder Overlay Elements (Recording indicators, Audio Level, Resolution) -->
-        <div class="viewfinder-overlays">
-          <!-- Top Overlay: Active Recording Timer -->
-          <div id="recordingBadge" class="recording-badge hidden">
-            <span class="recording-dot"></span>
-            <span id="recordingTimerText" class="recording-timer">00:00</span>
-          </div>
-
-          <!-- Resolution / Info Tag -->
-          <div id="resolutionTag" class="resolution-tag">1080p</div>
-
-          <!-- Audio VU Meter Bar -->
-          <div class="audio-meter-container" title="Live Microphone Audio Level">
-            <div class="audio-meter-icon">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+          <!-- Audio Mode Visualizer Visual Placeholder -->
+          <div id="audioModeVisual" class="audio-mode-visual hidden">
+            <div class="mic-pulse-ring"></div>
+            <div class="mic-icon-large">
+              <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor">
                 <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
                 <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
               </svg>
             </div>
-            <div class="audio-meter-track">
-              <div id="audioMeterLevel" class="audio-meter-level" style="width: 0%"></div>
+            <h3>Audio Recording Mode</h3>
+            <p>Microphone is live and ready</p>
+          </div>
+
+          <!-- 3x3 Rule-of-Thirds Grid Overlay -->
+          <div id="framingGrid" class="framing-grid hidden">
+            <div class="grid-line v1"></div>
+            <div class="grid-line v2"></div>
+            <div class="grid-line h1"></div>
+            <div class="grid-line h2"></div>
+          </div>
+
+          <!-- Shutter Flash Effect -->
+          <div id="flashOverlay" class="flash-overlay"></div>
+
+          <!-- Countdown Animated Number Badge -->
+          <div id="countdownBadge" class="countdown-badge hidden">3</div>
+
+          <!-- Viewfinder Overlay Elements (Recording indicators, Audio Level, Resolution) -->
+          <div class="viewfinder-overlays">
+            <!-- Top Overlay: Active Recording Timer -->
+            <div id="recordingBadge" class="recording-badge hidden">
+              <span class="recording-dot"></span>
+              <span id="recordingTimerText" class="recording-timer">00:00</span>
+            </div>
+
+            <!-- Resolution / Info Tag -->
+            <div id="resolutionTag" class="resolution-tag">1080p</div>
+
+            <!-- Audio VU Meter Bar -->
+            <div class="audio-meter-container" title="Live Microphone Audio Level">
+              <div class="audio-meter-icon">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                  <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                  <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+              </div>
+              <div class="audio-meter-track">
+                <div id="audioMeterLevel" class="audio-meter-level" style="width: 0%"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -225,6 +264,18 @@
         </div>
 
         <div class="drawer-body">
+          <div class="setting-group">
+            <label for="selectAspectRatio">Capture Aspect Ratio</label>
+            <select id="selectAspectRatio" class="custom-select">
+              <option value="16:9" selected>16:9 (Widescreen Landscape)</option>
+              <option value="9:16">9:16 (Vertical Story / Reel)</option>
+              <option value="4:3">4:3 (Standard Photo)</option>
+              <option value="3:4">3:4 (Vertical Portrait)</option>
+              <option value="1:1">1:1 (Square)</option>
+              <option value="native">Native (Full Camera Sensor)</option>
+            </select>
+          </div>
+
           <div class="setting-group">
             <label for="selectCamera">Camera Input</label>
             <select id="selectCamera" class="custom-select">

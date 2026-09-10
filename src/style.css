@@ -134,6 +134,91 @@ body {
   gap: 8px;
 }
 
+/* Dropdown Wrapper & Pill Button */
+.dropdown-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.pill-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 190px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  z-index: 50;
+  animation: dropIn 0.15s ease-out;
+}
+
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast);
+  width: 100%;
+}
+
+.dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dropdown-item.active {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--accent-blue);
+  font-weight: 700;
+}
+
+.ratio-name {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.ratio-desc {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
 /* Icon Buttons */
 .icon-btn {
   display: inline-flex;
@@ -182,13 +267,55 @@ body {
   height: 100%;
   max-width: 1200px;
   max-height: 800px;
-  background: #000;
+  background: radial-gradient(circle at center, #11141c 0%, #06070a 100%);
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Viewfinder Viewport with Dynamic Aspect Ratio */
+.viewfinder-viewport {
+  position: relative;
+  height: 100%;
+  max-height: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  transition: aspect-ratio 0.3s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Aspect Ratio Modifiers */
+.viewfinder-viewport.ratio-16-9 {
+  aspect-ratio: 16 / 9;
+}
+
+.viewfinder-viewport.ratio-9-16 {
+  aspect-ratio: 9 / 16;
+}
+
+.viewfinder-viewport.ratio-4-3 {
+  aspect-ratio: 4 / 3;
+}
+
+.viewfinder-viewport.ratio-3-4 {
+  aspect-ratio: 3 / 4;
+}
+
+.viewfinder-viewport.ratio-1-1 {
+  aspect-ratio: 1 / 1;
+}
+
+.viewfinder-viewport.ratio-native {
+  aspect-ratio: auto;
+  width: 100%;
+  height: 100%;
 }
 
 #previewVideo {

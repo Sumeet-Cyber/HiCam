@@ -1,8 +1,89 @@
 /**
  * Media Recorder Module
  * Handles recording video with audio or standalone audio using the browser's MediaRecorder API.
- * Detects browser-supported MIME types automatically.
+ * Supports aspect ratio cropping (1:1, 16:9, 9:16, 4:3, 3:4) via canvas stream rendering.
  */
+
+import { calculateCrop } from './capture.js';
+
+export class CanvasStreamRenderer {
+  constructor(videoEl, aspectRatio = 'native', mirrored = false) {
+    this.videoEl = videoEl;
+    this.aspectRatio = aspectRatio;
+    this.mirrored = mirrored;
+    this.canvas = document.createElement('canvas');
+    this.ctx = this.canvas.getContext('2d', { alpha: false });
+    this.active = false;
+    this.animId = null;
+    this.stream = null;
+  }
+
+  start() {
+    this.active = true;
+    const rawW = this.videoEl.videoWidth || 1280;
+    const rawH = this.videoEl.videoHeight || 720;
+    const initialCrop = calculateCrop(rawW, rawH, this.aspectRatio);
+
+    this.canvas.width = initialCrop.dWidth;
+    this.canvas.height = initialCrop.dHeight;
+
+    const renderLoop = () => {
+      if (!this.active) return;
+
+      if (this.videoEl && this.videoEl.readyState >= 2) {
+        const vw = this.videoEl.videoWidth || 1280;
+        const vh = this.videoEl.videoHeight || 720;
+        const crop = calculateCrop(vw, vh, this.aspectRatio);
+
+        if (this.canvas.width !== crop.dWidth || this.canvas.height !== crop.dHeight) {
+          this.canvas.width = crop.dWidth;
+          this.canvas.height = crop.dHeight;
+        }
+
+        this.ctx.save();
+        if (this.mirrored) {
+          this.ctx.translate(crop.dWidth, 0);
+          this.ctx.scale(-1, 1);
+        }
+        this.ctx.drawImage(
+          this.videoEl,
+          crop.sx,
+          crop.sy,
+          crop.sWidth,
+          crop.sHeight,
+          0,
+          0,
+          crop.dWidth,
+          crop.dHeight
+        );
+        this.ctx.restore();
+      }
+
+      this.animId = requestAnimationFrame(renderLoop);
+    };
+
+    renderLoop();
+
+    if (typeof this.canvas.captureStream === 'function') {
+      this.stream = this.canvas.captureStream(30);
+    }
+    return this.stream;
+  }
+
+  stop() {
+    this.active = false;
+    if (this.animId) {
+      cancelAnimationFrame(this.animId);
+      this.animId = null;
+    }
+    if (this.stream) {
+      this.stream.getTracks().forEach(track => {
+        try { track.stop(); } catch (e) {}
+      });
+      this.stream = null;
+    }
+  }
+}
 
 export class MediaRecordingManager {
   constructor() {
@@ -14,6 +95,7 @@ export class MediaRecordingManager {
     this.elapsedSeconds = 0;
     this.pausedSeconds = 0;
     this.pauseStartTime = 0;
+    this.canvasRenderer = null;
   }
 
   /**
@@ -73,7 +155,7 @@ export class MediaRecordingManager {
    * Start recording
    * @param {MediaStream} stream 
    * @param {'video' | 'audio'} mode 
-   * @param {Object} options 
+   * @param {Object} options { aspectRatio: string, videoEl: HTMLVideoElement, mirrored: boolean, onDurationTick, onError }
    * @returns {Promise<void>}
    */
   startRecording(stream, mode = 'video', options = {}) {
@@ -91,7 +173,6 @@ export class MediaRecordingManager {
 
     if (mode === 'audio') {
       mimeType = MediaRecordingManager.getSupportedAudioMimeType();
-      // Only record audio tracks if in audio mode
       const audioTracks = stream.getAudioTracks();
       if (!audioTracks || audioTracks.length === 0) {
         throw new Error('No audio track available for audio recording. Please enable microphone.');
@@ -99,6 +180,24 @@ export class MediaRecordingManager {
       recordingStream = new MediaStream(audioTracks);
     } else {
       mimeType = MediaRecordingManager.getSupportedVideoMimeType();
+
+      // If a custom aspect ratio or mirrored recording is requested and videoEl is provided:
+      const needsCanvasRender = options.videoEl && (options.aspectRatio && options.aspectRatio !== 'native' || options.mirrored);
+      if (needsCanvasRender) {
+        this.canvasRenderer = new CanvasStreamRenderer(
+          options.videoEl,
+          options.aspectRatio || 'native',
+          Boolean(options.mirrored)
+        );
+        const canvasStream = this.canvasRenderer.start();
+
+        if (canvasStream) {
+          const combinedStream = new MediaStream();
+          canvasStream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
+          stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+          recordingStream = combinedStream;
+        }
+      }
     }
 
     const recorderOptions = {};
@@ -123,6 +222,7 @@ export class MediaRecordingManager {
       this.mediaRecorder.onerror = (event) => {
         console.error('MediaRecorder error:', event.error);
         this._stopDurationTimer();
+        this._cleanupCanvasRenderer();
         this.state = 'inactive';
         if (options.onError) options.onError(event.error);
         reject(event.error);
@@ -137,7 +237,7 @@ export class MediaRecordingManager {
         resolve();
       };
 
-      // Request data every 1000ms to preserve chunks in case of unexpected termination
+      // Request data every 1000ms
       this.mediaRecorder.start(1000);
     });
   }
@@ -190,6 +290,8 @@ export class MediaRecordingManager {
 
       this.mediaRecorder.onstop = () => {
         this.state = 'inactive';
+        this._cleanupCanvasRenderer();
+
         try {
           const blob = new Blob(this.recordedChunks, { type: actualMimeType });
           const isAudioOnly = actualMimeType.startsWith('audio');
@@ -220,9 +322,17 @@ export class MediaRecordingManager {
       try {
         this.mediaRecorder.stop();
       } catch (err) {
+        this._cleanupCanvasRenderer();
         reject(err);
       }
     });
+  }
+
+  _cleanupCanvasRenderer() {
+    if (this.canvasRenderer) {
+      this.canvasRenderer.stop();
+      this.canvasRenderer = null;
+    }
   }
 
   _startDurationTimer(onTick) {

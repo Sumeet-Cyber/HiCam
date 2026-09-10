@@ -1,5 +1,5 @@
 import { CameraManager } from './modules/camera.js';
-import { PhotoCapturer } from './modules/capture.js';
+import { PhotoCapturer, calculateCrop } from './modules/capture.js';
 import { MediaRecordingManager } from './modules/recorder.js';
 import { AudioController } from './modules/audioMeter.js';
 import { GalleryManager } from './modules/gallery.js';
@@ -7,6 +7,7 @@ import { GalleryManager } from './modules/gallery.js';
 // DOM Elements
 const previewVideo = document.getElementById('previewVideo');
 const viewfinder = document.getElementById('viewfinder');
+const viewfinderViewport = document.getElementById('viewfinderViewport');
 const streamStatusBadge = document.getElementById('streamStatusBadge');
 const resolutionTag = document.getElementById('resolutionTag');
 const audioMeterLevel = document.getElementById('audioMeterLevel');
@@ -22,6 +23,9 @@ const errorMessageDetail = document.getElementById('errorMessageDetail');
 const btnRetryCamera = document.getElementById('btnRetryCamera');
 
 // Quick Overlays & Header Buttons
+const btnAspectRatio = document.getElementById('btnAspectRatio');
+const aspectRatioLabel = document.getElementById('aspectRatioLabel');
+const aspectRatioMenu = document.getElementById('aspectRatioMenu');
 const btnToggleGrid = document.getElementById('btnToggleGrid');
 const btnToggleMirror = document.getElementById('btnToggleMirror');
 const btnTogglePiP = document.getElementById('btnTogglePiP');
@@ -70,6 +74,7 @@ const btnDownloadMedia = document.getElementById('btnDownloadMedia');
 const settingsDrawer = document.getElementById('settingsDrawer');
 const settingsBackdrop = document.getElementById('settingsBackdrop');
 const btnCloseSettings = document.getElementById('btnCloseSettings');
+const selectAspectRatio = document.getElementById('selectAspectRatio');
 const selectCamera = document.getElementById('selectCamera');
 const selectMicrophone = document.getElementById('selectMicrophone');
 const selectResolution = document.getElementById('selectResolution');
@@ -82,6 +87,7 @@ const toastContainer = document.getElementById('toastContainer');
 
 // State
 let currentMode = 'photo'; // 'photo' | 'video' | 'audio'
+let currentAspectRatio = '16:9'; // '16:9', '9:16', '4:3', '3:4', '1:1', 'native'
 let isMirrored = true;
 let isGridVisible = false;
 let countdownSeconds = 0;
@@ -112,14 +118,54 @@ function showToast(message, duration = 3000) {
 }
 
 /**
- * Update Resolution Display Tag
+ * Update Resolution & Aspect Ratio Display Tag
  */
 function updateResolutionDisplay() {
   const w = previewVideo.videoWidth;
   const h = previewVideo.videoHeight;
   if (w && h) {
-    resolutionTag.textContent = `${w}x${h}`;
+    const crop = calculateCrop(w, h, currentAspectRatio);
+    const ratioLabel = currentAspectRatio === 'native' ? 'Full' : currentAspectRatio;
+    resolutionTag.textContent = `${crop.dWidth}x${crop.dHeight} (${ratioLabel})`;
   }
+}
+
+/**
+ * Switch Aspect Ratio (16:9, 9:16, 4:3, 3:4, 1:1, native)
+ */
+function setAspectRatio(ratio) {
+  if (isRecording) {
+    showToast('Please stop recording before changing aspect ratio.');
+    return;
+  }
+
+  currentAspectRatio = ratio;
+  aspectRatioLabel.textContent = ratio === 'native' ? 'Sensor' : ratio;
+
+  // Update viewport class to dynamically change CSS aspect ratio framing
+  viewfinderViewport.className = 'viewfinder-viewport ratio-' + ratio.replace(':', '-');
+
+  // Sync menu items
+  aspectRatioMenu.querySelectorAll('.dropdown-item').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.ratio === ratio);
+  });
+
+  // Sync settings dropdown
+  if (selectAspectRatio && selectAspectRatio.value !== ratio) {
+    selectAspectRatio.value = ratio;
+  }
+
+  updateResolutionDisplay();
+
+  const labels = {
+    '16:9': '16:9 Widescreen Landscape',
+    '9:16': '9:16 Vertical Story / Reel',
+    '4:3': '4:3 Standard Photo',
+    '3:4': '3:4 Vertical Portrait',
+    '1:1': '1:1 Square',
+    'native': 'Native Camera Sensor',
+  };
+  showToast(`Aspect ratio: ${labels[ratio] || ratio}`);
 }
 
 /**
@@ -316,6 +362,7 @@ async function handleTakePhoto() {
 
     const captureResult = await capturer.captureFrame(previewVideo, {
       mirrored: isMirrored,
+      aspectRatio: currentAspectRatio,
       format: 'image/png',
     });
 
@@ -325,7 +372,7 @@ async function handleTakePhoto() {
       thumbnailUrl: captureResult.dataUrl,
     });
 
-    showToast('Photo captured!');
+    showToast(`Photo captured! (${captureResult.width}x${captureResult.height})`);
     updateGalleryThumbnail(item);
   } catch (err) {
     console.error('Photo capture error:', err);
@@ -346,6 +393,9 @@ async function handleToggleVideoRecording() {
       }
 
       await recorder.startRecording(camera.stream, 'video', {
+        aspectRatio: currentAspectRatio,
+        videoEl: previewVideo,
+        mirrored: isMirrored,
         onDurationTick: (secs, formatted) => {
           recordingTimerText.textContent = formatted;
         },
@@ -362,7 +412,7 @@ async function handleToggleVideoRecording() {
       btnShutter.classList.add('video-recording');
       btnShutter.setAttribute('title', 'Stop Recording');
 
-      showToast('Video recording started');
+      showToast(`Video recording started (${currentAspectRatio})`);
     } catch (err) {
       console.error('Start video error:', err);
       showToast('Failed to start recording: ' + err.message);
@@ -382,10 +432,13 @@ async function handleToggleVideoRecording() {
       btnShutter.classList.add('video-mode');
       btnShutter.setAttribute('title', 'Start Recording Video');
 
-      // Capture a thumbnail from the video
+      // Capture matching aspect ratio thumbnail from video
       let thumbUrl = '';
       try {
-        const thumb = await capturer.captureFrame(previewVideo, { mirrored: isMirrored });
+        const thumb = await capturer.captureFrame(previewVideo, {
+          mirrored: isMirrored,
+          aspectRatio: currentAspectRatio,
+        });
         thumbUrl = thumb.dataUrl;
       } catch (e) {}
 
@@ -627,6 +680,30 @@ function setupEventListeners() {
     });
   }
 
+  // Aspect Ratio Dropdown in Top Bar
+  btnAspectRatio.addEventListener('click', (e) => {
+    e.stopPropagation();
+    aspectRatioMenu.classList.toggle('hidden');
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!aspectRatioMenu.contains(e.target) && e.target !== btnAspectRatio) {
+      aspectRatioMenu.classList.add('hidden');
+    }
+  });
+
+  aspectRatioMenu.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      setAspectRatio(btn.dataset.ratio);
+      aspectRatioMenu.classList.add('hidden');
+    });
+  });
+
+  // Aspect Ratio in Settings Drawer
+  selectAspectRatio.addEventListener('change', (e) => {
+    setAspectRatio(e.target.value);
+  });
+
   // Mode Selection Tabs
   modePhotoBtn.addEventListener('click', () => setMode('photo'));
   modeVideoBtn.addEventListener('click', () => setMode('video'));
@@ -649,6 +726,8 @@ function setupEventListeners() {
         galleryDrawer.classList.add('hidden');
       } else if (!settingsDrawer.classList.contains('hidden')) {
         settingsDrawer.classList.add('hidden');
+      } else if (!aspectRatioMenu.classList.contains('hidden')) {
+        aspectRatioMenu.classList.add('hidden');
       }
     }
   });

@@ -1,8 +1,67 @@
 /**
  * Photo Capture Module
  * Captures high-resolution still frames from HTMLVideoElement onto Canvas,
- * handling mirroring, flash animations, and countdown timers.
+ * handling mirroring, custom aspect ratio crops (1:1, 16:9, 9:16, 4:3, 3:4),
+ * flash animations, and countdown timers.
  */
+
+/**
+ * Calculates centered crop coordinates and output dimensions for a given aspect ratio
+ * Ensures even-pixel dimensions for maximum encoder & renderer compatibility.
+ * @param {number} videoWidth 
+ * @param {number} videoHeight 
+ * @param {string|number} targetAspectRatio e.g. '1:1', '16:9', '9:16', '4:3', '3:4', 'native'
+ * @returns {{ sx: number, sy: number, sWidth: number, sHeight: number, dWidth: number, dHeight: number }}
+ */
+export function calculateCrop(videoWidth, videoHeight, targetAspectRatio) {
+  if (!targetAspectRatio || targetAspectRatio === 'native') {
+    const evenW = Math.floor(videoWidth / 2) * 2;
+    const evenH = Math.floor(videoHeight / 2) * 2;
+    return {
+      sx: 0,
+      sy: 0,
+      sWidth: evenW,
+      sHeight: evenH,
+      dWidth: evenW,
+      dHeight: evenH,
+    };
+  }
+
+  let ratio = 1;
+  if (typeof targetAspectRatio === 'number') {
+    ratio = targetAspectRatio;
+  } else if (typeof targetAspectRatio === 'string') {
+    const parts = targetAspectRatio.split(':').map(Number);
+    if (parts.length === 2 && parts[0] > 0 && parts[1] > 0) {
+      ratio = parts[0] / parts[1];
+    }
+  }
+
+  const srcRatio = videoWidth / videoHeight;
+  let sWidth, sHeight;
+
+  if (srcRatio > ratio) {
+    // Source is wider than target: crop left & right
+    sHeight = Math.floor(videoHeight / 2) * 2;
+    sWidth = Math.floor((sHeight * ratio) / 2) * 2;
+  } else {
+    // Source is taller than target: crop top & bottom
+    sWidth = Math.floor(videoWidth / 2) * 2;
+    sHeight = Math.floor((sWidth / ratio) / 2) * 2;
+  }
+
+  const sx = Math.floor((videoWidth - sWidth) / 2);
+  const sy = Math.floor((videoHeight - sHeight) / 2);
+
+  return {
+    sx,
+    sy,
+    sWidth,
+    sHeight,
+    dWidth: sWidth,
+    dHeight: sHeight,
+  };
+}
 
 export class PhotoCapturer {
   constructor() {
@@ -10,24 +69,31 @@ export class PhotoCapturer {
   }
 
   /**
-   * Captures the current frame from video element
+   * Captures the current frame from video element with aspect ratio crop
    * @param {HTMLVideoElement} videoEl
-   * @param {Object} options { mirrored: boolean, format: 'image/png' | 'image/jpeg', quality: number }
+   * @param {Object} options { mirrored: boolean, aspectRatio: string, format: string, quality: number }
    * @returns {Promise<{ blob: Blob, dataUrl: string, width: number, height: number }>}
    */
   async captureFrame(videoEl, options = {}) {
-    const { mirrored = true, format = 'image/png', quality = 0.95 } = options;
+    const {
+      mirrored = true,
+      aspectRatio = 'native',
+      format = 'image/png',
+      quality = 0.95,
+    } = options;
 
     if (!videoEl || videoEl.readyState < 2) {
       throw new Error('Video stream is not ready for capture');
     }
 
-    const width = videoEl.videoWidth || 1280;
-    const height = videoEl.videoHeight || 720;
+    const rawWidth = videoEl.videoWidth || 1280;
+    const rawHeight = videoEl.videoHeight || 720;
+
+    const crop = calculateCrop(rawWidth, rawHeight, aspectRatio);
 
     const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = crop.dWidth;
+    canvas.height = crop.dHeight;
 
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) {
@@ -36,11 +102,21 @@ export class PhotoCapturer {
 
     // Apply mirroring if requested
     if (mirrored) {
-      ctx.translate(width, 0);
+      ctx.translate(crop.dWidth, 0);
       ctx.scale(-1, 1);
     }
 
-    ctx.drawImage(videoEl, 0, 0, width, height);
+    ctx.drawImage(
+      videoEl,
+      crop.sx,
+      crop.sy,
+      crop.sWidth,
+      crop.sHeight,
+      0,
+      0,
+      crop.dWidth,
+      crop.dHeight
+    );
 
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => {
@@ -53,8 +129,8 @@ export class PhotoCapturer {
         resolve({
           blob,
           dataUrl,
-          width,
-          height,
+          width: crop.dWidth,
+          height: crop.dHeight,
         });
       }, format, quality);
     });
