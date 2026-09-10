@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>hiCam - Web Camera & Recorder</title>
+  <meta name="description" content="Capture photos, record video, and record audio directly in your browser with hiCam." />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%233b82f6'><path d='M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z'/><path fill-rule='evenodd' d='M9 2 7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3.17L15 2H9Zm3 15a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z' clip-rule='evenodd'/></svg>" />
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="app" class="app-container">
+    <!-- Top Bar Navigation -->
+    <header class="top-bar">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+            <path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/>
+            <path fill-rule="evenodd" d="M9 2 7.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3.17L15 2H9Zm3 15a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z" clip-rule="evenodd"/>
+          </svg>
+        </div>
+        <span class="brand-name">hiCam</span>
+        <span id="streamStatusBadge" class="status-badge">Standby</span>
+      </div>
+
+      <div class="top-actions">
+        <!-- Quick Viewfinder Overlays -->
+        <button id="btnToggleGrid" class="icon-btn" title="Toggle 3x3 Framing Grid" aria-label="Toggle Grid">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <line x1="9" y1="3" x2="9" y2="21"/>
+            <line x1="15" y1="3" x2="15" y2="21"/>
+            <line x1="3" y1="9" x2="21" y2="9"/>
+            <line x1="3" y1="15" x2="21" y2="15"/>
+          </svg>
+        </button>
+
+        <button id="btnToggleMirror" class="icon-btn active" title="Toggle Mirroring (Selfie Mode)" aria-label="Toggle Mirror">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 3v18M17 7l4 5-4 5M7 7l-4 5 4 5"/>
+          </svg>
+        </button>
+
+        <button id="btnTogglePiP" class="icon-btn" title="Picture in Picture" aria-label="Picture in Picture">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="4" width="20" height="16" rx="2"/>
+            <rect x="12" y="11" width="8" height="7" rx="1" fill="currentColor" opacity="0.3"/>
+          </svg>
+        </button>
+
+        <button id="btnOpenSettings" class="icon-btn" title="Device & Quality Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Viewfinder Section -->
+    <main class="viewfinder-section">
+      <div id="viewfinder" class="viewfinder mirrored">
+        <!-- Live Video Element -->
+        <video id="previewVideo" playsinline autoplay muted></video>
+
+        <!-- Audio Mode Visualizer Visual Placeholder -->
+        <div id="audioModeVisual" class="audio-mode-visual hidden">
+          <div class="mic-pulse-ring"></div>
+          <div class="mic-icon-large">
+            <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+          </div>
+          <h3>Audio Recording Mode</h3>
+          <p>Microphone is live and ready</p>
+        </div>
+
+        <!-- 3x3 Rule-of-Thirds Grid Overlay -->
+        <div id="framingGrid" class="framing-grid hidden">
+          <div class="grid-line v1"></div>
+          <div class="grid-line v2"></div>
+          <div class="grid-line h1"></div>
+          <div class="grid-line h2"></div>
+        </div>
+
+        <!-- Shutter Flash Effect -->
+        <div id="flashOverlay" class="flash-overlay"></div>
+
+        <!-- Countdown Animated Number Badge -->
+        <div id="countdownBadge" class="countdown-badge hidden">3</div>
+
+        <!-- Viewfinder Overlay Elements (Recording indicators, Audio Level, Resolution) -->
+        <div class="viewfinder-overlays">
+          <!-- Top Overlay: Active Recording Timer -->
+          <div id="recordingBadge" class="recording-badge hidden">
+            <span class="recording-dot"></span>
+            <span id="recordingTimerText" class="recording-timer">00:00</span>
+          </div>
+
+          <!-- Resolution / Info Tag -->
+          <div id="resolutionTag" class="resolution-tag">1080p</div>
+
+          <!-- Audio VU Meter Bar -->
+          <div class="audio-meter-container" title="Live Microphone Audio Level">
+            <div class="audio-meter-icon">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+              </svg>
+            </div>
+            <div class="audio-meter-track">
+              <div id="audioMeterLevel" class="audio-meter-level" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Error / Permission Denied State -->
+        <div id="cameraErrorState" class="camera-error-state hidden">
+          <div class="error-icon">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 1l22 22M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3m3-3h6l2 3h4a2 2 0 0 1 2 2v9.34m-7.72-2.06a4 4 0 1 1-5.56-5.56"/>
+            </svg>
+          </div>
+          <h2 id="errorMessageTitle">Camera Access Required</h2>
+          <p id="errorMessageDetail">Please allow camera and microphone permissions in your browser to use hiCam.</p>
+          <button id="btnRetryCamera" class="btn-primary">Grant Access & Retry</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Bottom Controls & Mode Bar -->
+    <footer class="bottom-controls">
+      <!-- Mode Tabs (Photo / Video / Audio) -->
+      <div class="mode-selector-pill" role="tablist">
+        <button id="modePhoto" class="mode-tab active" data-mode="photo" role="tab" aria-selected="true">
+          <span>Photo</span>
+        </button>
+        <button id="modeVideo" class="mode-tab" data-mode="video" role="tab" aria-selected="false">
+          <span>Video</span>
+        </button>
+        <button id="modeAudio" class="mode-tab" data-mode="audio" role="tab" aria-selected="false">
+          <span>Audio Only</span>
+        </button>
+      </div>
+
+      <!-- Action Buttons Row -->
+      <div class="action-bar">
+        <!-- Gallery Preview Button -->
+        <div class="action-left">
+          <button id="btnOpenGallery" class="gallery-thumbnail-btn" title="View Captured Media">
+            <div id="galleryThumbnailPlaceholder" class="gallery-placeholder">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg>
+            </div>
+            <img id="galleryThumbnailImg" class="gallery-thumbnail-img hidden" alt="Recent capture" />
+            <span id="galleryBadge" class="gallery-badge hidden">0</span>
+          </button>
+        </div>
+
+        <!-- Central Shutter / Record Control with Timer -->
+        <div class="action-center">
+          <div class="shutter-wrapper">
+            <button id="btnShutter" class="shutter-btn photo-mode" aria-label="Take Photo" title="Click to Capture">
+              <div class="shutter-inner"></div>
+            </button>
+          </div>
+
+          <!-- Countdown Timer Option Dropdown -->
+          <div class="timer-selector">
+            <button id="btnTimerToggle" class="timer-btn" title="Timer countdown">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span id="timerLabel">Off</span>
+            </button>
+            <div id="timerMenu" class="timer-menu hidden">
+              <button data-seconds="0" class="active">Off</button>
+              <button data-seconds="3">3s</button>
+              <button data-seconds="5">5s</button>
+              <button data-seconds="10">10s</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Secondary Controls (Camera Flip & Mute) -->
+        <div class="action-right">
+          <!-- Flip Camera (Front/Rear on mobile, or cycle devices) -->
+          <button id="btnFlipCamera" class="icon-btn-round" title="Flip Camera" aria-label="Flip Camera">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 10c0-4.42-3.58-8-8-8s-8 3.58-8 8c0 2.21.9 4.21 2.34 5.66L4 18h6v-6l-2.34 2.34A5.996 5.996 0 0 1 6 10c0-3.31 2.69-6 6-6s6 2.69 6 6c0 1.66-.67 3.16-1.76 4.24l1.42 1.42A7.963 7.963 0 0 0 20 10z"/>
+            </svg>
+          </button>
+
+          <!-- Toggle Mic Mute -->
+          <button id="btnToggleMic" class="icon-btn-round" title="Mute Microphone" aria-label="Toggle Microphone">
+            <svg id="micIconOn" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+            <svg id="micIconOff" class="hidden" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+              <path d="m19 11-.01-.01-.01-.01c0 .87-.23 1.69-.64 2.4l1.46 1.46C20.55 13.67 21 12.39 21 11h-2zm-7 3c.33 0 .64-.06.94-.15l2.02 2.02A6.974 6.974 0 0 1 12 18c-3.53 0-6.43-2.61-6.92-6H3c.49 4.15 3.86 7.42 8 7.93V23h2v-3.07c1.37-.17 2.64-.67 3.73-1.42l3.41 3.41 1.41-1.41L4.27 3 2.86 4.41l6.19 6.19c-.03.13-.05.26-.05.4v3c0 1.66 1.34 3 3 3zm1-11c0-.55-.45-1-1-1s-1 .45-1 1v2.18l2 2V3z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Settings Slide-over Drawer -->
+    <div id="settingsDrawer" class="drawer hidden">
+      <div class="drawer-backdrop" id="settingsBackdrop"></div>
+      <div class="drawer-content">
+        <div class="drawer-header">
+          <h3>Settings</h3>
+          <button id="btnCloseSettings" class="icon-btn" aria-label="Close settings">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="drawer-body">
+          <div class="setting-group">
+            <label for="selectCamera">Camera Input</label>
+            <select id="selectCamera" class="custom-select">
+              <option value="">Default Camera</option>
+            </select>
+          </div>
+
+          <div class="setting-group">
+            <label for="selectMicrophone">Microphone Input</label>
+            <select id="selectMicrophone" class="custom-select">
+              <option value="">Default Microphone</option>
+            </select>
+          </div>
+
+          <div class="setting-group">
+            <label for="selectResolution">Video Quality Preset</label>
+            <select id="selectResolution" class="custom-select">
+              <option value="1080p" selected>Full HD (1080p)</option>
+              <option value="720p">HD (720p)</option>
+              <option value="480p">SD (480p)</option>
+              <option value="4k">Ultra HD (4K)</option>
+            </select>
+          </div>
+
+          <hr class="drawer-divider" />
+
+          <div class="setting-row">
+            <div>
+              <strong>Shutter & UI Sounds</strong>
+              <p class="setting-subtext">Play subtle sound clicks when capturing or recording</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chkSoundEffects" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <strong>Mirror Video</strong>
+              <p class="setting-subtext">Flip preview horizontally for natural selfie view</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chkMirrorVideo" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <div>
+              <strong>Framing Grid</strong>
+              <p class="setting-subtext">Show 3x3 rule-of-thirds grid</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="chkGridLines" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gallery Shelf Drawer -->
+    <div id="galleryDrawer" class="drawer hidden">
+      <div class="drawer-backdrop" id="galleryBackdrop"></div>
+      <div class="drawer-content gallery-drawer-content">
+        <div class="drawer-header">
+          <h3>Captured Media (<span id="galleryCountHeader">0</span>)</h3>
+          <button id="btnCloseGallery" class="icon-btn" aria-label="Close gallery">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="drawer-body">
+          <div id="galleryGrid" class="gallery-grid">
+            <!-- Dynamically populated media items -->
+          </div>
+          <div id="galleryEmptyState" class="gallery-empty-state">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/>
+              <polyline points="21 15 16 10 5 21"/>
+            </svg>
+            <p>No media captured yet.</p>
+            <span>Take a photo or record a video/audio to see it here!</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lightbox / Media Preview Modal -->
+    <div id="previewModal" class="modal hidden">
+      <div class="modal-backdrop" id="previewModalBackdrop"></div>
+      <div class="modal-container">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span id="previewModalTypeTag" class="preview-type-tag">PHOTO</span>
+            <span id="previewModalFilename" class="preview-filename">filename.png</span>
+          </div>
+          <button id="btnClosePreviewModal" class="icon-btn" aria-label="Close preview">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <div id="previewMediaContainer" class="preview-media-container">
+            <!-- Render dynamic img / video / audio element -->
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <div class="media-meta">
+            <span id="previewMetaSize">0 KB</span>
+            <span class="meta-dot">•</span>
+            <span id="previewMetaTime">Just now</span>
+          </div>
+          <div class="modal-actions">
+            <button id="btnDeleteMedia" class="btn-danger">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+              Delete
+            </button>
+            <button id="btnDownloadMedia" class="btn-primary">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Download
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
